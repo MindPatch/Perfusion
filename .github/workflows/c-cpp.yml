@@ -1,0 +1,63 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ master, main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+      
+    - name: Setup VSWhere
+      uses: warrenbuckley/Setup-VSWhere@v1
+      
+    - name: Restore NuGet packages
+      run: nuget restore Perfusion.sln
+      
+    - name: Build Solution
+      run: msbuild Perfusion.sln /p:Configuration=Release /p:Platform=x64 /m
+      
+    - name: List build output
+      run: |
+        echo "Listing x64/Release directory:"
+        dir x64\Release /s
+      shell: cmd
+      
+    - name: Create artifact directory
+      run: |
+        mkdir artifacts
+        if exist x64\Release\Perfusion.exe copy x64\Release\Perfusion.exe artifacts\
+        if exist x64\Release\PerfusionDll.dll copy x64\Release\PerfusionDll.dll artifacts\
+      shell: cmd
+      
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: perfusion-build
+        path: artifacts/
+        retention-days: 30
+        
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/Perfusion.exe
+          artifacts/PerfusionDll.dll
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
